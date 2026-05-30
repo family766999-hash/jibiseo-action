@@ -1,88 +1,99 @@
 import streamlit as st
 import pandas as pd
-import requests
-from bs4 import BeautifulSoup
 import urllib.parse
 
-# v22.1 업데이트: 태블릿 최적화 레이아웃 적용
-st.set_page_config(layout="wide", page_title="지비서 추노 작전판 v22", page_icon="📈")
+# 1. 페이지 설정
+st.set_page_config(layout="wide", page_title="지비서 작전판", page_icon="📈")
 
-# 1. 암호 확인 및 설정
+# 2. 암호 관리
+if "password_correct" not in st.session_state: st.session_state["password_correct"] = False
 def check_password():
-    def password_entered():
-        if st.session_state["password"] == "rkwhr42":
-            st.session_state["password_correct"] = True
-            del st.session_state["password"]
-        else:
-            st.session_state["password_correct"] = False
-    if "password_correct" not in st.session_state:
-        st.text_input("🔑 대장님, 암호를 입력하십시오.", type="password", on_change=password_entered, key="password")
-        return False
-    return st.session_state.get("password_correct", False)
+    if st.session_state["password_correct"]: return True
+    pwd = st.text_input("🔑 대장님, 암호를 입력하십시오.", type="password")
+    if pwd == "rkwhr42": st.session_state["password_correct"] = True; st.rerun()
+    elif pwd: st.error("암호가 틀렸습니다.")
+    return False
+if not check_password(): st.stop()
 
-if not check_password():
-    st.stop()
+# 3. 데이터 로드
+@st.cache_data(ttl=60)
+def load_data():
+    sheet_url = "https://docs.google.com/spreadsheets/d/10XzkMRByoPPjJ9ycm7i6IaaOpKEpBHaK8g6RQpE65sk/export?format=csv"
+    df = pd.read_csv(sheet_url)
+    df.columns = df.columns.str.strip()
+    return df.fillna("")
 
-# 2. 데이터 로드
-sheet_url = "https://docs.google.com/spreadsheets/d/10XzkMRByoPPjJ9ycm7i6IaaOpKEpBHaK8g6RQpE65sk/edit?usp=sharing"
-csv_url = sheet_url.split('/edit')[0] + '/export?format=csv'
-df = pd.read_csv(csv_url)
-df.columns = df.columns.str.strip()
+df = load_data()
 
-for col in ['현재가', '매집평단', '전일종가']:
-    df[col] = pd.to_numeric(df[col].astype(str).str.replace(r'[^\d]', '', regex=True), errors='coerce')
-df['변동율'] = (df['현재가'] - df['전일종가']) / df['전일종가']
-
-# 3. 전광판 로직
-watch_col = next((col for col in df.columns if '지정가' in col and '감시' in col), None)
+# 4. 전광판 로직
 ticker_items = []
-if watch_col:
-    near_df = df[df[watch_col].astype(str).str.contains('지정가 근접|지정가근접', na=False)]
-    for _, row in near_df.iterrows():
-        ns = str(row['뉴스 와 펄']) if '뉴스 와 펄' in row and pd.notnull(row['뉴스 와 펄']) else ""
-        ticker_items.append(f"🔥 [{row['테마']}] {row['종목명']} - {ns}")
+for _, row in df.iterrows():
+    # 모든 값을 문자열로 안전하게 변환하여 합치기
+    row_str = " ".join([str(val) for val in row.values])
+    if '지정가근접' in row_str:
+        news = str(row.get('뉴스 와 펄', ''))
+        news_display = f" | {news}" if news else ""
+        item = f"🔥 [{row.get('테마', '')}] {row.get('종목명', '')}{news_display}"
+        if item not in ticker_items: ticker_items.append(item)
 
-ticker_text = " 🚀 ".join(ticker_items) if ticker_items else "✨ 현재 감시 중인 '지정가 근접' 종목이 없습니다. 편안하게 관망하십시오. ☕"
-
+ticker_text = " 🚀 ".join(ticker_items) if ticker_items else "✨ 현재 감시 중인 '지정가 근접' 종목이 없습니다. ☕"
 st.markdown(f"""
-    <div style="background-color: #1a1a1a; padding: 14px; border-radius: 5px; margin-bottom: 25px; border-left: 5px solid #ff4b4b;">
-        <marquee behavior="scroll" direction="left" scrollamount="5" style="color: #ffffff; font-size: 17px; font-weight: bold;">
-            {ticker_text}
-        </marquee>
+    <div style="background-color: #1a1a1a; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 5px solid #ff4b4b;">
+        <marquee behavior="scroll" direction="left" scrollamount="5" style="color: #ffffff; font-size: 18px; font-weight: bold;">{ticker_text}</marquee>
     </div>
 """, unsafe_allow_html=True)
 
-# 4. 검색/테마 로직
-def clear_search(): st.session_state.search_bar = ""
-def clear_theme(): st.session_state.theme_select = None
+# 5. 검색 및 일람표 (조건부 서식 적용 버전)
+
+def clear_search(): st.session_state["search_bar"] = ""
 
 col1, col2 = st.columns([1, 1])
-with col1:
-    selected_theme = st.selectbox("📂 테마 선택", df['테마'].unique(), key="theme_select", on_change=clear_search)
-with col2:
-    search_query = st.text_input("🔍 종목명 직접 검색", key="search_bar", on_change=clear_theme)
+themes = df['테마'].unique() if not df.empty and '테마' in df.columns else []
+with col1: selected_theme = st.selectbox("📂 테마 선택", themes, on_change=clear_search)
+with col2: search_query = st.text_input("🔍 종목명 직접 검색", key="search_bar")
 
-filtered_df = df[df['종목명'].str.contains(search_query, na=False)] if search_query else df[df['테마'] == selected_theme]
+if search_query:
+    filtered_df = df[df['종목명'].astype(str).str.contains(search_query, na=False)]
+else:
+    filtered_df = df[df['테마'] == selected_theme]
 
-# 5. 일람표 및 상세분석 (태블릿 대응형 레이아웃)
-# PC에서는 좌우, 좁은 화면(태블릿)에서는 위아래로 자동으로 흐름
+# 이모티콘 처리
+display_df = filtered_df.copy()
+if not display_df.empty:
+    display_df['종목명'] = display_df.apply(lambda x: "🔥 " + str(x['종목명']) if '지정가근접' in str(x.values) else str(x['종목명']), axis=1)
+
 st.subheader("📋 종목 일람표")
-selected_rows = st.dataframe(filtered_df[['종목명', '현재가', '변동율', '매집평단', '현재단계']], 
-                             use_container_width=True, height=400, on_select="rerun", selection_mode="single-row")
+cols = ['종목명', '현재가', '변동율', '매집평단', '평단비율', '현재단계', '예상고점']
+valid_cols = [c for c in cols if c in display_df.columns]
 
-st.divider()
+# --- [조건부 서식 함수] ---
+def color_text(val):
+    try:
+        # 문자로 된 숫자에서 기호를 제거하고 float 변환
+        num = float(str(val).replace('%', '').replace(',', '').strip())
+        color = 'red' if num > 0 else 'blue' if num < 0 else 'black'
+    except:
+        color = 'black'
+    return f'color: {color}'
 
-# 리포트 영역을 명확히 분리
-if selected_rows and 'selection' in selected_rows and selected_rows['selection']['rows']:
-    idx = selected_rows['selection']['rows'][0]
+# 데이터프레임 스타일링 (변동율, 평단비율 컬럼에만 적용)
+styled_df = display_df[valid_cols].style.map(color_text, subset=['변동율', '평단비율'])
+
+event = st.dataframe(
+    styled_df, 
+    use_container_width=True, 
+    selection_mode="single-row", 
+    on_select="rerun"
+)
+
+# 6. 상세 분석 리포트
+if event.selection.rows:
+    idx = event.selection.rows[0]
     row = filtered_df.iloc[idx]
     st.markdown(f"### 🔍 **{row['종목명']}** 상세 분석 리포트")
-    
-    if '뉴스 와 펄' in row and pd.notnull(row['뉴스 와 펄']):
-        st.info(f"📌 **뉴스 와 펄**: {row['뉴스 와 펄']}")
-    
+    if '뉴스 와 펄' in row and pd.notnull(row['뉴스 와 펄']): st.info(f"📌 **뉴스 와 펄**: {row['뉴스 와 펄']}")
     c1, c2 = st.columns(2)
-    with c1: st.link_button("📈 네이버 증권", f"https://search.naver.com/search.naver?query={urllib.parse.quote(row['종목명'] + ' 주가')}")
-    with c2: st.link_button("📢 DART 공시", f"https://dart.fss.or.kr/dsab001/main.do?textCrpNm={urllib.parse.quote(row['종목명'])}")
+    with c1: st.link_button("📈 네이버 증권", f"https://search.naver.com/search.naver?query={urllib.parse.quote(str(row['종목명']) + ' 주가')}")
+    with c2: st.link_button("📢 DART 공시", f"https://dart.fss.or.kr/dsab001/main.do?textCrpNm={urllib.parse.quote(str(row['종목명']))}")
 else:
     st.write("👆 위 표에서 종목을 선택하시면 상세 리포트가 아래에 나타납니다.")
