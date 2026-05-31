@@ -85,7 +85,7 @@ event = st.dataframe(
     selection_mode="single-row", 
     on_select="rerun"
 )
-# 6. 상세 분석 리포트 & 지비서 호출 (디자인 유지 + 태블릿 링크 안정화)
+# 6. 상세 분석 리포트 & 지비서 호출 (디자인 유지 + 명칭 변경)
 if len(event.selection.rows) > 0:
     idx = event.selection.rows[0]
     row = filtered_df.iloc[idx]
@@ -97,37 +97,28 @@ if len(event.selection.rows) > 0:
     
     stock_name = urllib.parse.quote(str(row['종목명']))
     
-    # 디자인 통일: 배경색 없고 테두리만 있는 깔끔한 스타일 유지
     st.markdown("""
         <style>
         .nav-container { display: flex; gap: 10px; margin-bottom: 20px; }
         .nav-btn { 
-            flex: 1; 
-            padding: 15px; 
-            text-align: center; 
-            border-radius: 8px; 
-            font-weight: bold; 
-            text-decoration: none; 
-            border: 2px solid #555; 
-            color: #333; 
-            background-color: transparent; 
+            flex: 1; padding: 15px; text-align: center; border-radius: 8px; font-weight: bold; 
+            text-decoration: none; border: 2px solid #555; color: #333; background-color: transparent; 
         }
         </style>
     """, unsafe_allow_html=True)
 
-    # [수정] target="_blank"와 rel="noopener noreferrer" 추가
-    # 태블릿에서 이 속성이 있어야 브라우저가 '새 탭 열기' 명령을 올바르게 수행합니다.
+    # 버튼 이름 변경: 호출 대신 이동의 의미로 변경
     st.markdown(f"""
         <div class="nav-container">
             <a href="https://search.naver.com/search.naver?query={stock_name}+주가" target="_blank" rel="noopener noreferrer" class="nav-btn">📈 네이버증권</a>
             <a href="https://dart.fss.or.kr/dsab001/main.do?textCrpNm={stock_name}" target="_blank" rel="noopener noreferrer" class="nav-btn">📢 DART공시</a>
-            <a href="https://gemini.google.com/app" target="_blank" rel="noopener noreferrer" class="nav-btn">🚀 지비서호출</a>
+            <a href="https://gemini.google.com/app" target="_blank" rel="noopener noreferrer" class="nav-btn">🚀 제미나이 가기</a>
         </div>
     """, unsafe_allow_html=True)
 
-    # 2. 지비서 분석 요청서
+    # 요청서 제목 변경: 데이터 복사용임을 명시
     st.markdown(f"---")
-    st.subheader("🤖 지비서(AI) 분석 요청서")
+    st.subheader("📋 분석 대상 데이터 복사")
     
     persona_prompt = (
         f"너는 나만의 주식 투자 전문 비서야 나는 대장이야.\n\n"
@@ -140,7 +131,7 @@ if len(event.selection.rows) > 0:
     )
     
     st.code(persona_prompt, language="text")
-    st.caption("💡 태블릿에서는 버튼을 누르면 새 탭으로 열립니다. 만약 닫히면 버튼을 **길게 꾸욱 눌러 [새 탭에서 열기]** 하세요!")
+    st.caption("💡 위 데이터를 **[복사]**한 뒤, [🚀 제미나이 가기]를 눌러 붙여넣으세요!")
 
 else:
     st.write("👆 위 표에서 종목을 선택하시면 상세 리포트가 나타납니다.")
