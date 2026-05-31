@@ -85,35 +85,27 @@ event = st.dataframe(
     selection_mode="single-row", 
     on_select="rerun"
 )
-# 6. 상세 분석 리포트 & 지비서 호출 (태블릿 완벽 대응: 현재 페이지 이동 방식)
+# 6. 상세 분석 리포트 & 지비서 호출 (절대 닫히지 않는 '수동 클릭' 방식)
 if len(event.selection.rows) > 0:
     idx = event.selection.rows[0]
     row = filtered_df.iloc[idx]
     
     st.markdown(f"---")
     st.markdown(f"### 🔍 **{row['종목명']}** 상세 분석")
-    if '뉴스 와 펄' in row and pd.notnull(row['뉴스 와 펄']): 
-        st.info(f"📌 **기존 참고 자료(뉴스 와 펄)**: {row['뉴스 와 펄']}")
     
+    # [수동 이동 모드] 버튼 클릭 시 창이 열리는 대신, URL 주소를 복사하거나 직접 누를 수 있게 구성
+    st.info("💡 **태블릿 사용 시:** 아래 버튼을 **꾸욱 눌러서 [새 탭에서 열기]**를 선택하세요.")
+    
+    c1, c2, c3 = st.columns(3)
     stock_name = urllib.parse.quote(str(row['종목명']))
     
-    # [변경점] target="_blank"(새창)를 제거하고 현재 탭에서 이동하도록 수정
-    st.markdown("""
-        <style>
-        .nav-container { display: flex; gap: 10px; margin-bottom: 20px; }
-        .nav-btn { flex: 1; padding: 15px; text-align: center; border-radius: 8px; font-weight: bold; text-decoration: none; color: white; }
-        </style>
-    """, unsafe_allow_html=True)
+    with c1:
+        st.markdown(f'[📈 네이버증권](https://search.naver.com/search.naver?query={stock_name}+주가)', unsafe_allow_html=True)
+    with c2:
+        st.markdown(f'[📢 DART공시](https://dart.fss.or.kr/dsab001/main.do?textCrpNm={stock_name})', unsafe_allow_html=True)
+    with c3:
+        st.markdown(f'[🚀 지비서호출](https://gemini.google.com/app)', unsafe_allow_html=True)
 
-    st.markdown(f"""
-        <div class="nav-container">
-            <a href="https://search.naver.com/search.naver?query={stock_name}+주가" class="nav-btn" style="background-color: #03c75a;">📈 네이버증권</a>
-            <a href="https://dart.fss.or.kr/dsab001/main.do?textCrpNm={stock_name}" class="nav-btn" style="background-color: #555;">📢 DART공시</a>
-            <a href="https://gemini.google.com/app" class="nav-btn" style="background-color: #ff4b4b;">🚀 지비서호출</a>
-        </div>
-    """, unsafe_allow_html=True)
-
-    # 2. 지비서 분석 요청서
     st.markdown(f"---")
     st.subheader("🤖 지비서(AI) 분석 요청서")
     
@@ -128,7 +120,7 @@ if len(event.selection.rows) > 0:
     )
     
     st.code(persona_prompt, language="text")
-    st.caption("👆 위 상자 우측 상단의 복사 아이콘을 클릭하세요.")
+    st.caption("👆 우측 상단 복사 아이콘 클릭 -> [🚀 지비서호출] 글자 꾸욱 누르기 -> [새 탭에서 열기]")
 
 else:
     st.write("👆 위 표에서 종목을 선택하시면 상세 리포트가 나타납니다.")
