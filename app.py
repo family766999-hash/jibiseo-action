@@ -86,7 +86,7 @@ event = st.dataframe(
     on_select="rerun"
 )
 
-# 6. 상세 분석 리포트 & 지비서 호출 (오리지널 복사 버튼 버전)
+# 6. 상세 분석 리포트 & 지비서 호출 (새 탭 이동 + 오리지널 복사 버튼 + 모바일 최적화)
 if len(event.selection.rows) > 0:
     idx = event.selection.rows[0]
     row = filtered_df.iloc[idx]
@@ -96,30 +96,57 @@ if len(event.selection.rows) > 0:
     if '뉴스 와 펄' in row and pd.notnull(row['뉴스 와 펄']): 
         st.info(f"📌 **기존 참고 자료(뉴스 와 펄)**: {row['뉴스 와 펄']}")
     
-    # 1. 호출 버튼들 (기존 유지)
+    # 1. 태블릿 최적화 스타일 및 버튼 (새 탭 이동 보장)
+    st.markdown("""
+        <style>
+        .custom-link-button {
+            display: block;
+            width: 100%;
+            height: 60px;
+            line-height: 60px;
+            text-align: center;
+            background-color: #f0f2f6;
+            color: black;
+            font-weight: bold;
+            text-decoration: none;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            margin-bottom: 5px;
+        }
+        .gemini-button {
+            background-color: #ff4b4b !important;
+            color: white !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    stock_name = urllib.parse.quote(str(row['종목명']))
+    
     c1, c2, c3 = st.columns(3)
-    with c1: st.link_button("📈 네이버증권", f"https://search.naver.com/search.naver?query={urllib.parse.quote(str(row['종목명']) + ' 주가')}", use_container_width=True)
-    with c2: st.link_button("📢 DART공시", f"https://dart.fss.or.kr/dsab001/main.do?textCrpNm={urllib.parse.quote(str(row['종목명']))}", use_container_width=True)
-    with c3: st.link_button("🚀 지비서호출", "https://gemini.google.com/app", use_container_width=True)
+    with c1: 
+        st.markdown(f'<a href="https://search.naver.com/search.naver?query={stock_name}+주가" target="_blank" rel="noopener noreferrer" class="custom-link-button">📈 네이버증권</a>', unsafe_allow_html=True)
+    with c2: 
+        st.markdown(f'<a href="https://dart.fss.or.kr/dsab001/main.do?textCrpNm={stock_name}" target="_blank" rel="noopener noreferrer" class="custom-link-button">📢 DART공시</a>', unsafe_allow_html=True)
+    with c3: 
+        st.markdown(f'<a href="https://gemini.google.com/app" target="_blank" rel="noopener noreferrer" class="custom-link-button gemini-button">🚀 지비서호출</a>', unsafe_allow_html=True)
 
-    # 2. 지비서 분석 요청서 (복사 버튼 자동 생성)
+    # 2. 지비서 분석 요청서
     st.markdown(f"---")
     st.subheader("🤖 지비서(AI) 분석 요청서")
     
     persona_prompt = (
-        f"너는 나만의 주식 투자 전문 비서인 '지비서'야나는 너의 대장이고.\n\n"
+        f"너는 나만의 주식 투자 전문 비서인 '지비서'야 나는 대장이야.\n\n"
         f"분석 대상: {row['종목명']}\n"
         f"참고용 기존 자료: {row.get('뉴스 와 펄', '없음')}\n\n"
         f"지시사항:\n"
         f"1. 웹 검색을 통해 해당 종목의 '최신 뉴스'와 '최신 공시'를 우선적으로 찾아줘.\n"
-        f"2. 기존 자료에서 펄부분을 참고 하고, 최신 실시간 정보를 기반으로 기업의 핵심 이슈를 정리해줘.\n"
-        f"3. 가격, 매매 전략, 평단가 등은 배제하고 오직 기업의 사업 가치와 최신 뉴스 흐름 위주로만 보고해줘."
+        f"2. 기존 자료는 참고만 하고, 최신 실시간 정보를 기반으로 기업의 핵심 이슈를 정리해줘.\n"
+        f"3. 가격, 매매 전략, 평단가 등은 배제하고 오직 기업의 강점과 약점 사업 가치와 최신 뉴스 흐름 위주로만 보고해줘."
     )
     
-    # st.code는 우측 상단에 복사 아이콘이 자동으로 생성됩니다.
-    # 가장 작지만, 가장 확실하게 복사되는 버튼입니다.
+    # st.code는 우측 상단 복사 아이콘이 가장 확실합니다.
     st.code(persona_prompt, language="text")
-    st.caption("👆 위 상자 우측 상단의 **복사 아이콘**을 클릭하여 복사하세요.")
+    st.caption("👆 위 상자 우측 상단의 **복사 아이콘**을 클릭하세요.")
 
 else:
     st.write("👆 위 표에서 종목을 선택하시면 상세 리포트가 나타납니다.")
