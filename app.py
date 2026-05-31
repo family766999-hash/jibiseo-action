@@ -129,7 +129,7 @@ if len(event.selection.rows) > 0:
     st.subheader("🤖 지비서(AI) 분석 요청서")
     
     persona_prompt = (
-        f"너는 나만의 주식 투자 전문 비서인 '지비서'야 나는 대장이야.\n\n"
+        f"너는 나만의 주식 투자 전문 비서야 나는 대장이야.\n\n"
         f"분석 대상: {row['종목명']}\n"
         f"참고용 기존 자료: {row.get('뉴스 와 펄', '없음')}\n\n"
         f"지시사항:\n"
