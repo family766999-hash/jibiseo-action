@@ -85,7 +85,7 @@ event = st.dataframe(
     selection_mode="single-row", 
     on_select="rerun"
 )
-# 6. 상세 분석 리포트 & 지비서 호출 (태블릿 수동 조작 최적화 - 디자인 통일)
+# 6. 상세 분석 리포트 & 지비서 호출 (디자인 유지 + 태블릿 링크 안정화)
 if len(event.selection.rows) > 0:
     idx = event.selection.rows[0]
     row = filtered_df.iloc[idx]
@@ -97,7 +97,7 @@ if len(event.selection.rows) > 0:
     
     stock_name = urllib.parse.quote(str(row['종목명']))
     
-    # [수정] 모든 버튼의 배경색을 빼고 동일한 테두리 스타일 적용
+    # 디자인 통일: 배경색 없고 테두리만 있는 깔끔한 스타일 유지
     st.markdown("""
         <style>
         .nav-container { display: flex; gap: 10px; margin-bottom: 20px; }
@@ -108,19 +108,20 @@ if len(event.selection.rows) > 0:
             border-radius: 8px; 
             font-weight: bold; 
             text-decoration: none; 
-            border: 2px solid #555; /* 동일한 테두리 색상 */
-            color: #333;           /* 통일된 글자색 */
+            border: 2px solid #555; 
+            color: #333; 
             background-color: transparent; 
         }
         </style>
     """, unsafe_allow_html=True)
 
-    # 버튼 구성: 모두 배경색 없이 통일감 있게
+    # [수정] target="_blank"와 rel="noopener noreferrer" 추가
+    # 태블릿에서 이 속성이 있어야 브라우저가 '새 탭 열기' 명령을 올바르게 수행합니다.
     st.markdown(f"""
         <div class="nav-container">
-            <a href="https://search.naver.com/search.naver?query={stock_name}+주가" class="nav-btn">📈 네이버증권</a>
-            <a href="https://dart.fss.or.kr/dsab001/main.do?textCrpNm={stock_name}" class="nav-btn">📢 DART공시</a>
-            <a href="https://gemini.google.com/app" class="nav-btn">🚀 지비서호출</a>
+            <a href="https://search.naver.com/search.naver?query={stock_name}+주가" target="_blank" rel="noopener noreferrer" class="nav-btn">📈 네이버증권</a>
+            <a href="https://dart.fss.or.kr/dsab001/main.do?textCrpNm={stock_name}" target="_blank" rel="noopener noreferrer" class="nav-btn">📢 DART공시</a>
+            <a href="https://gemini.google.com/app" target="_blank" rel="noopener noreferrer" class="nav-btn">🚀 지비서호출</a>
         </div>
     """, unsafe_allow_html=True)
 
@@ -139,7 +140,7 @@ if len(event.selection.rows) > 0:
     )
     
     st.code(persona_prompt, language="text")
-    st.caption("💡 태블릿은 링크를 **길게 꾹 눌러서 [새 탭에서 열기]** 하시는 게 가장 편합니다!")
+    st.caption("💡 태블릿에서는 버튼을 누르면 새 탭으로 열립니다. 만약 닫히면 버튼을 **길게 꾸욱 눌러 [새 탭에서 열기]** 하세요!")
 
 else:
     st.write("👆 위 표에서 종목을 선택하시면 상세 리포트가 나타납니다.")
