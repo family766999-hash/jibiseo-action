@@ -85,8 +85,7 @@ event = st.dataframe(
     selection_mode="single-row", 
     on_select="rerun"
 )
-
-# 6. 상세 분석 리포트 & 지비서 호출 (기존 구조 유지 + 태블릿 안정성 강화)
+# 6. 상세 분석 리포트 & 지비서 호출 (태블릿 완벽 대응: 현재 페이지 이동 방식)
 if len(event.selection.rows) > 0:
     idx = event.selection.rows[0]
     row = filtered_df.iloc[idx]
@@ -96,17 +95,23 @@ if len(event.selection.rows) > 0:
     if '뉴스 와 펄' in row and pd.notnull(row['뉴스 와 펄']): 
         st.info(f"📌 **기존 참고 자료(뉴스 와 펄)**: {row['뉴스 와 펄']}")
     
-    # 1. 안정성이 입증된 스트림릿 표준 링크 버튼 사용
-    # HTML 직접 삽입보다 이 방식이 태블릿(Safari/Chrome) 보안 정책에서 튕기지 않습니다.
     stock_name = urllib.parse.quote(str(row['종목명']))
     
-    c1, c2, c3 = st.columns(3)
-    with c1: 
-        st.link_button("📈 네이버증권", f"https://search.naver.com/search.naver?query={stock_name}+주가", use_container_width=True)
-    with c2: 
-        st.link_button("📢 DART공시", f"https://dart.fss.or.kr/dsab001/main.do?textCrpNm={stock_name}", use_container_width=True)
-    with c3: 
-        st.link_button("🚀 지비서호출", "https://gemini.google.com/app", use_container_width=True)
+    # [변경점] target="_blank"(새창)를 제거하고 현재 탭에서 이동하도록 수정
+    st.markdown("""
+        <style>
+        .nav-container { display: flex; gap: 10px; margin-bottom: 20px; }
+        .nav-btn { flex: 1; padding: 15px; text-align: center; border-radius: 8px; font-weight: bold; text-decoration: none; color: white; }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown(f"""
+        <div class="nav-container">
+            <a href="https://search.naver.com/search.naver?query={stock_name}+주가" class="nav-btn" style="background-color: #03c75a;">📈 네이버증권</a>
+            <a href="https://dart.fss.or.kr/dsab001/main.do?textCrpNm={stock_name}" class="nav-btn" style="background-color: #555;">📢 DART공시</a>
+            <a href="https://gemini.google.com/app" class="nav-btn" style="background-color: #ff4b4b;">🚀 지비서호출</a>
+        </div>
+    """, unsafe_allow_html=True)
 
     # 2. 지비서 분석 요청서
     st.markdown(f"---")
@@ -122,9 +127,8 @@ if len(event.selection.rows) > 0:
         f"3. 가격, 매매 전략, 평단가 등은 배제하고 오직 기업의 강점과 약점 사업 가치와 최신 뉴스 흐름 위주로만 보고해줘."
     )
     
-    # 우측 상단 복사 아이콘이 생성되는 표준 code 블록
     st.code(persona_prompt, language="text")
-    st.caption("👆 위 상자 우측 상단의 **복사 아이콘**을 클릭하세요.")
+    st.caption("👆 위 상자 우측 상단의 복사 아이콘을 클릭하세요.")
 
 else:
     st.write("👆 위 표에서 종목을 선택하시면 상세 리포트가 나타납니다.")
