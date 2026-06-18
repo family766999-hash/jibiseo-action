@@ -1,17 +1,27 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import os
 import time
 import urllib.parse
 from streamlit_autorefresh import st_autorefresh
 
-# 파일 경로 설정
-NOTICE_FILE = "notice.txt"
-NEWS_FILE = "news.txt"
-QUOTE_FILE = "quote.txt"
+# 1. 데이터 연결 설정
+SHEET_ID = "10BZzLb5lKxujiVo1ktxPih-4n6_mWW_A4YaofmCVcTo"
 
-# [데이터 가져오기 함수]
+def get_cell_value(cell_range):
+    url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&range={cell_range}"
+    try:
+        df = pd.read_csv(url, header=None)
+        return str(df.iloc[0, 0]) if not df.empty else "데이터 없음"
+    except: return "데이터 없음"
+
+def load_data():
+    # 시트 ID 통일 (대장님의 현재 시트)
+    sheet_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&t={time.time()}"
+    df = pd.read_csv(sheet_url)
+    df.columns = df.columns.str.strip()
+    return df.fillna("")
+
 def get_market_data():
     tickers = {"코스피": "^KS11", "코스닥": "^KQ11", "코스피선물": "069500.KS", "환율": "USDKRW=X", "나스닥": "^IXIC", "S&P500": "^GSPC"}
     data = {}
@@ -25,14 +35,8 @@ def get_market_data():
         except: data[name] = {"curr": 0, "diff": 0}
     return data
 
-def load_data():
-    url = f"https://docs.google.com/spreadsheets/d/10XzkMRByoPPjJ9ycm7i6IaaOpKEpBHaK8g6RQpE65sk/export?format=csv&t={time.time()}"
-    return pd.read_csv(url).fillna("")
-
-# [세션 상태 초기화]
-if "password_correct" not in st.session_state:
-    st.session_state["password_correct"] = False
-
+# UI 메인 로직
+if "password_correct" not in st.session_state: st.session_state["password_correct"] = False
 
 # [로그인 전 화면]
 if not st.session_state["password_correct"]:
@@ -41,19 +45,13 @@ if not st.session_state["password_correct"]:
     col_a.subheader("📊 오늘의 종합 시황")
     col_b.markdown(f"<div style='text-align: right;'>📅 {time.strftime('%Y-%m-%d')}</div>", unsafe_allow_html=True)
     
-    # 강조된 격언 전광판
-    if os.path.exists(QUOTE_FILE):
-        with open(QUOTE_FILE, "r", encoding="utf-8") as f:
-            q = f.read()
-            if q.strip():
-                st.markdown(f"""
-                <div style="background: #1a1a1a; padding: 20px; border-radius: 15px; border: 3px solid #FFD700; box-shadow: 0 0 15px #FFD700; margin-bottom: 30px;">
-                    <div style="color: #FFD700; font-size: 14px; margin-bottom: 10px; font-weight: bold;">★ 오늘의 투자 격언 ★</div>
-                    <marquee behavior="scroll" direction="left" scrollamount="7" style="color: #FFFFFF; font-size: 24px; font-weight: bold;">{q}</marquee>
-                </div>
-                """, unsafe_allow_html=True)
+    st.markdown(f"""
+        <div style="background: #1a1a1a; padding: 20px; border-radius: 15px; border: 3px solid #FFD700; box-shadow: 0 0 15px #FFD700; margin-bottom: 30px;">
+            <div style="color: #FFD700; font-size: 14px; margin-bottom: 10px; font-weight: bold;">★ 오늘의 투자 격언 ★</div>
+            <marquee behavior="scroll" direction="left" scrollamount="7" style="color: #FFFFFF; font-size: 24px; font-weight: bold;">{get_cell_value('B6')}</marquee>
+        </div>
+    """, unsafe_allow_html=True)
     
-    # 시장 지수
     m = get_market_data()
     c1, c2, c3 = st.columns(3)
     c1.metric("코스피", m["코스피"]["curr"], m["코스피"]["diff"])
@@ -64,70 +62,22 @@ if not st.session_state["password_correct"]:
     c5.metric("나스닥", m["나스닥"]["curr"], m["나스닥"]["diff"])
     c6.metric("S&P500", m["S&P500"]["curr"], m["S&P500"]["diff"])
     
-    # [추가됨] 지수 아래 공지사항 출력
     st.subheader("📢 오늘의 공지사항")
-    if os.path.exists(NOTICE_FILE):
-        with open(NOTICE_FILE, "r", encoding="utf-8") as f:
-            content = f.read()
-            st.info(f"📌 {content}" if content.strip() else "등록된 공지가 없습니다.")
+    st.info(f"📌 {get_cell_value('B2')}")
     
     st.markdown("---")
-    
     pwd = st.text_input("🔑 암호를 입력하십시오.", type="password")
     if st.button("로그인"):
-        if pwd == "rkwhr42":
-            st.session_state["password_correct"] = True
-            st.rerun()
+        if pwd == "rkwhr42": st.session_state["password_correct"] = True; st.rerun()
         else: st.error("암호가 틀렸습니다.")
-    st.stop() # 로그인 전 화면 끝
+    st.stop()
 
 
 
 
+# [상단부 생략... 기존 코드와 동일하게 유지]
 
-
-
-
-
-
-# --- [로그인 성공 후 화면] ---
-st_autorefresh(interval=300000, key="datarefresh") # 로그인 후 새로고침 시작
-
-# 지수 출력 없음 (깔끔하게 이슈 전광판만 출력)
-daily_issue = open(NEWS_FILE, "r", encoding="utf-8").read() if os.path.exists(NEWS_FILE) else "📢 등록된 오늘의 이슈가 없습니다."
-st.markdown(f"""
-    <div style="background: #e8f5e9; padding: 15px; border-radius: 10px; border-left: 5px solid #2e7d32; margin-bottom: 20px;">
-        <div style="color: #2e7d32; font-weight: bold;">📢 오늘의 이슈</div>
-        <marquee style="color: #1b5e20; font-size: 18px; font-weight: bold;">{daily_issue}</marquee>
-    </div>
-""", unsafe_allow_html=True)
-
-
-
-
-
-# 3. 사이드바 관리 (동일하게 유지)
-with st.sidebar:
-    st.header("👩‍💼 제나의 통합 관리")
-    
-    # 1. 공지사항
-    n = st.text_area("공지 수정:", value=open(NOTICE_FILE, "r", encoding="utf-8").read() if os.path.exists(NOTICE_FILE) else "", height=100)
-    
-    # 2. 오늘의 이슈 (로그인 후용)
-    i = st.text_area("오늘의 이슈 수정:", value=open(NEWS_FILE, "r", encoding="utf-8").read() if os.path.exists(NEWS_FILE) else "", height=80)
-    
-    # 3. 오늘의 격언 (로그인 전용)
-    q = st.text_input("오늘의 격언 수정 (로그인 전):", value=open(QUOTE_FILE, "r", encoding="utf-8").read() if os.path.exists(QUOTE_FILE) else "")
-    
-    if st.button("내용 업데이트 저장"):
-        with open(NOTICE_FILE, "w", encoding="utf-8") as f: f.write(n)
-        with open(NEWS_FILE, "w", encoding="utf-8") as f: f.write(i)
-        with open(QUOTE_FILE, "w", encoding="utf-8") as f: f.write(q)
-        st.success("저장 완료!")
-        st.rerun()
-
-
-# 3. 데이터 로드 (강제 새로고침 적용: 시간값 t 추가)
+# 3. 데이터 로드 (대장님 환경에서 잘 되던 기존 방식 그대로 유지)
 def load_data():
     sheet_url = f"https://docs.google.com/spreadsheets/d/10XzkMRByoPPjJ9ycm7i6IaaOpKEpBHaK8g6RQpE65sk/export?format=csv&t={time.time()}"
     df = pd.read_csv(sheet_url)
@@ -136,22 +86,38 @@ def load_data():
 
 df = load_data()
 
+# ==============================================================
+# [이슈 전광판 삽입]
+# ==============================================================
+st.markdown(f"""
+    <div style="background: #e8f5e9; padding: 15px; border-radius: 10px; border-left: 5px solid #2e7d32; margin-bottom: 20px;">
+        <div style="color: #2e7d32; font-weight: bold;">📢 오늘의 이슈</div>
+        <marquee style="color: #1b5e20; font-size: 18px; font-weight: bold;">{get_cell_value('B4')}</marquee>
+    </div>
+""", unsafe_allow_html=True)
+
 # 5. 검색 및 일람표 (데이터 처리)
 def clear_search(): st.session_state["search_bar"] = ""
 col1, col2 = st.columns([1, 1])
-themes = df['테마'].unique() if not df.empty and '테마' in df.columns else []
-with col1: selected_theme = st.selectbox("📂 테마 선택", themes, on_change=clear_search)
-with col2: search_query = st.text_input("🔍 종목명 직접 검색", key="search_bar")
 
-if search_query:
-    filtered_df = df[df['종목명'].astype(str).str.contains(search_query, na=False)]
+# 💡 'display_df'를 여기서 미리 비어있는 상태로 정의합니다!
+display_df = pd.DataFrame()
+
+if '테마' in df.columns:
+    themes = df['테마'].unique()
+    with col1: selected_theme = st.selectbox("📂 테마 선택", themes, on_change=clear_search)
+    with col2: search_query = st.text_input("🔍 종목명 직접 검색", key="search_bar")
+
+    # 필터링 로직
+    if search_query:
+        display_df = df[df['종목명'].astype(str).str.contains(search_query, na=False)]
+    elif selected_theme:
+        display_df = df[df['테마'] == selected_theme]
+    else:
+        display_df = df.copy()
 else:
-    filtered_df = df[df['테마'] == selected_theme]
-
-# 전광판과 일람표용 데이터프레임
-display_df = filtered_df.copy()
-
-
+    st.error("시트에서 '테마' 컬럼을 찾을 수 없습니다.")
+    display_df = df.copy()
 
 
 # 일람표 서식 적용
@@ -169,14 +135,19 @@ def color_text(val):
 styled_df = display_df[valid_cols].style.map(color_text, subset=['변동율', '평단비율'])
 event = st.dataframe(styled_df, use_container_width=True, selection_mode="single-row", on_select="rerun")
 
-# 6. 상세 분석 리포트 (기존 버튼 간격 유지)
-if len(event.selection.rows) > 0:
+  # 6. 상세 분석 리포트 (수정된 버전)
+# filtered_df 대신 이미 정의된 display_df를 사용합니다.
+if 'event' in locals() and len(event.selection.rows) > 0:
     idx = event.selection.rows[0]
-    row = filtered_df.iloc[idx]
+    # display_df를 사용하도록 변경
+    row = display_df.iloc[idx]
     
     st.markdown(f"---")
     st.markdown(f"### 🔍 **{row['종목명']}** 상세 분석")
     
+  
+
+  # ... (이하 나머지 코드는 동일하게 유지하세요)  
     if '뉴스 와 펄' in row and row['뉴스 와 펄']:
         st.info(f"📌 **참고 자료**: {row['뉴스 와 펄']}")
     
