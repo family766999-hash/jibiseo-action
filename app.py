@@ -1,28 +1,131 @@
 import streamlit as st
+import yfinance as yf
 import pandas as pd
-import urllib.parse
+import os
 import time
+import urllib.parse
+from streamlit_autorefresh import st_autorefresh
 
-# 1. 페이지 설정
-st.set_page_config(layout="wide", page_title="지비서 작전판", page_icon="📈")
+# 파일 경로 설정
+NOTICE_FILE = "notice.txt"
+NEWS_FILE = "news.txt"
+QUOTE_FILE = "quote.txt"
 
-# 2. 암호 관리
-if "password_correct" not in st.session_state: 
+# [데이터 가져오기 함수]
+def get_market_data():
+    tickers = {"코스피": "^KS11", "코스닥": "^KQ11", "코스피선물": "069500.KS", "환율": "USDKRW=X", "나스닥": "^IXIC", "S&P500": "^GSPC"}
+    data = {}
+    for name, ticker in tickers.items():
+        try:
+            df = yf.Ticker(ticker).history(period="2d")
+            if not df.empty:
+                curr, prev = df['Close'].iloc[-1], df['Close'].iloc[-2]
+                data[name] = {"curr": round(curr, 2), "diff": round(curr - prev, 2)}
+            else: data[name] = {"curr": 0, "diff": 0}
+        except: data[name] = {"curr": 0, "diff": 0}
+    return data
+
+def load_data():
+    url = f"https://docs.google.com/spreadsheets/d/10XzkMRByoPPjJ9ycm7i6IaaOpKEpBHaK8g6RQpE65sk/export?format=csv&t={time.time()}"
+    return pd.read_csv(url).fillna("")
+
+# [세션 상태 초기화]
+if "password_correct" not in st.session_state:
     st.session_state["password_correct"] = False
 
-def check_password():
-    if st.session_state["password_correct"]: 
-        return True
-    pwd = st.text_input("🔑 대장님, 암호를 입력하십시오.", type="password")
-    if pwd == "rkwhr42": 
-        st.session_state["password_correct"] = True
-        st.rerun()
-    elif pwd: 
-        st.error("암호가 틀렸습니다.")
-    return False
 
-if not check_password(): 
-    st.stop()
+# [로그인 전 화면]
+if not st.session_state["password_correct"]:
+    st.set_page_config(layout="wide")
+    col_a, col_b = st.columns([1, 1])
+    col_a.subheader("📊 오늘의 종합 시황")
+    col_b.markdown(f"<div style='text-align: right;'>📅 {time.strftime('%Y-%m-%d')}</div>", unsafe_allow_html=True)
+    
+    # 강조된 격언 전광판
+    if os.path.exists(QUOTE_FILE):
+        with open(QUOTE_FILE, "r", encoding="utf-8") as f:
+            q = f.read()
+            if q.strip():
+                st.markdown(f"""
+                <div style="background: #1a1a1a; padding: 20px; border-radius: 15px; border: 3px solid #FFD700; box-shadow: 0 0 15px #FFD700; margin-bottom: 30px;">
+                    <div style="color: #FFD700; font-size: 14px; margin-bottom: 10px; font-weight: bold;">★ 오늘의 투자 격언 ★</div>
+                    <marquee behavior="scroll" direction="left" scrollamount="7" style="color: #FFFFFF; font-size: 24px; font-weight: bold;">{q}</marquee>
+                </div>
+                """, unsafe_allow_html=True)
+    
+    # 시장 지수
+    m = get_market_data()
+    c1, c2, c3 = st.columns(3)
+    c1.metric("코스피", m["코스피"]["curr"], m["코스피"]["diff"])
+    c2.metric("코스닥", m["코스닥"]["curr"], m["코스닥"]["diff"])
+    c3.metric("코스피선물", m["코스피선물"]["curr"], m["코스피선물"]["diff"])
+    c4, c5, c6 = st.columns(3)
+    c4.metric("환율", m["환율"]["curr"], m["환율"]["diff"])
+    c5.metric("나스닥", m["나스닥"]["curr"], m["나스닥"]["diff"])
+    c6.metric("S&P500", m["S&P500"]["curr"], m["S&P500"]["diff"])
+    
+    # [추가됨] 지수 아래 공지사항 출력
+    st.subheader("📢 오늘의 공지사항")
+    if os.path.exists(NOTICE_FILE):
+        with open(NOTICE_FILE, "r", encoding="utf-8") as f:
+            content = f.read()
+            st.info(f"📌 {content}" if content.strip() else "등록된 공지가 없습니다.")
+    
+    st.markdown("---")
+    
+    pwd = st.text_input("🔑 암호를 입력하십시오.", type="password")
+    if st.button("로그인"):
+        if pwd == "rkwhr42":
+            st.session_state["password_correct"] = True
+            st.rerun()
+        else: st.error("암호가 틀렸습니다.")
+    st.stop() # 로그인 전 화면 끝
+
+
+
+
+
+
+
+
+
+
+# --- [로그인 성공 후 화면] ---
+st_autorefresh(interval=300000, key="datarefresh") # 로그인 후 새로고침 시작
+
+# 지수 출력 없음 (깔끔하게 이슈 전광판만 출력)
+daily_issue = open(NEWS_FILE, "r", encoding="utf-8").read() if os.path.exists(NEWS_FILE) else "📢 등록된 오늘의 이슈가 없습니다."
+st.markdown(f"""
+    <div style="background: #e8f5e9; padding: 15px; border-radius: 10px; border-left: 5px solid #2e7d32; margin-bottom: 20px;">
+        <div style="color: #2e7d32; font-weight: bold;">📢 오늘의 이슈</div>
+        <marquee style="color: #1b5e20; font-size: 18px; font-weight: bold;">{daily_issue}</marquee>
+    </div>
+""", unsafe_allow_html=True)
+
+
+
+
+
+# 3. 사이드바 관리 (동일하게 유지)
+with st.sidebar:
+    st.header("👩‍💼 제나의 통합 관리")
+    
+    # 1. 공지사항
+    n = st.text_area("공지 수정:", value=open(NOTICE_FILE, "r", encoding="utf-8").read() if os.path.exists(NOTICE_FILE) else "", height=100)
+    
+    # 2. 오늘의 이슈 (로그인 후용)
+    i = st.text_area("오늘의 이슈 수정:", value=open(NEWS_FILE, "r", encoding="utf-8").read() if os.path.exists(NEWS_FILE) else "", height=80)
+    
+    # 3. 오늘의 격언 (로그인 전용)
+    q = st.text_input("오늘의 격언 수정 (로그인 전):", value=open(QUOTE_FILE, "r", encoding="utf-8").read() if os.path.exists(QUOTE_FILE) else "")
+    
+    if st.button("내용 업데이트 저장"):
+        with open(NOTICE_FILE, "w", encoding="utf-8") as f: f.write(n)
+        with open(NEWS_FILE, "w", encoding="utf-8") as f: f.write(i)
+        with open(QUOTE_FILE, "w", encoding="utf-8") as f: f.write(q)
+        st.success("저장 완료!")
+        st.rerun()
+
 
 # 3. 데이터 로드 (강제 새로고침 적용: 시간값 t 추가)
 def load_data():
@@ -48,23 +151,8 @@ else:
 # 전광판과 일람표용 데이터프레임
 display_df = filtered_df.copy()
 
-# 4. 전광판 로직 (수식 관계없이 텍스트로 강제 인식)
-ticker_items = []
-for _, row in display_df.iterrows():
-    # 모든 데이터를 텍스트로 합쳐서 '지정가'와 '근접'이라는 단어가 포함되었는지 확인
-    row_str = " ".join([str(val) for val in row.values]).replace(" ", "")
-    if '지정가' in row_str and '근접' in row_str:
-        news = str(row.get('뉴스 와 펄', ''))
-        news_display = f" | {news}" if news else ""
-        item = f"🔥 [{row.get('테마', '')}] {row.get('종목명', '')}{news_display}"
-        if item not in ticker_items: ticker_items.append(item)
 
-ticker_text = " 🚀 ".join(ticker_items) if ticker_items else "✨ 현재 감시 중인 '지정가 근접' 종목이 없습니다. ☕"
-st.markdown(f"""
-    <div style="background-color: #1a1a1a; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 5px solid #ff4b4b;">
-        <marquee behavior="scroll" direction="left" scrollamount="5" style="color: #ffffff; font-size: 18px; font-weight: bold;">{ticker_text}</marquee>
-    </div>
-""", unsafe_allow_html=True)
+
 
 # 일람표 서식 적용
 if not display_df.empty:
@@ -95,9 +183,9 @@ if len(event.selection.rows) > 0:
     stock_name = urllib.parse.quote(str(row['종목명']))
     st.markdown(f"""
         <div style="display: flex; gap: 150px; margin-bottom: 20px;">
-            <a href="https://search.naver.com/search.naver?query={stock_name}+주가" target="_blank" style="padding:15px; border:2px solid #555; border-radius:8px; text-decoration:none; color:black;">📈 네이버증권</a>
-            <a href="https://dart.fss.or.kr/dsab001/main.do?textCrpNm={stock_name}" target="_blank" style="padding:15px; border:2px solid #555; border-radius:8px; text-decoration:none; color:black;">📢 DART공시</a>
-            <a href="https://gemini.google.com/app" target="_blank" style="padding:15px; border:2px solid #555; border-radius:8px; text-decoration:none; color:black;">🚀 제미나이 가기</a>
+            <a href="https://search.naver.com/search.naver?query={stock_name}+주가" target="_blank" style="padding:15px; border:2px solid #555; border-radius:8px; text-decoration:none; color:black;font-size: 13px;">📈 네이버증권</a>
+            <a href="https://dart.fss.or.kr/dsab001/main.do?textCrpNm={stock_name}" target="_blank" style="padding:15px; border:2px solid #555; border-radius:8px; text-decoration:none; color:black;font-size: 13px;">📢 DART공시</a>
+            <a href="https://gemini.google.com/app" target="_blank" style="padding:15px; border:2px solid #555; border-radius:8px; text-decoration:none; color:black;font-size: 13px;">🚀 제미나이 가기</a>
         </div>
     """, unsafe_allow_html=True)
     
@@ -109,3 +197,4 @@ if len(event.selection.rows) > 0:
                       "3. 가격, 매매 전략, 평단가 등은 배제하고 오직 기업의 강점과 약점, 사업 가치와 최신 뉴스 흐름 위주로 보고해줘.")
     st.code(persona_prompt, language="text")
     st.caption("💡 위 데이터를 [복사]한 뒤, [🚀 제미나이 가기]를 눌러 붙여넣으세요!")
+
