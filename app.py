@@ -3,30 +3,30 @@ import yfinance as yf
 import pandas as pd
 import time
 import urllib.parse
-
 import datetime
 import zoneinfo
 # 한국 시간으로 강제 설정
 now = datetime.datetime.now(zoneinfo.ZoneInfo("Asia/Seoul"))
-
 from streamlit_autorefresh import st_autorefresh
 
-# 1. 데이터 연결 설정
-SHEET_ID = "10BZzLb5lKxujiVo1ktxPih-4n6_mWW_A4YaofmCVcTo"
+# [주소만 수정됨] 격언, 공지, 이슈용 시트 ID
+INFO_SHEET_ID = "10BZzLb5lKxujiVo1ktxPih-4n6_mWW_A4YaofmCVcTo"
+# [주소만 수정됨] 데이터 로드용 시트 ID
+DATA_SHEET_ID = "10XzkMRByoPPjJ9ycm7i6IaaOpKEpBHaK8g6RQpE65sk"
 
 def get_cell_value(cell_range):
-    url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&range={cell_range}"
+    url = f"https://docs.google.com/spreadsheets/d/{INFO_SHEET_ID}/gviz/tq?tqx=out:csv&range={cell_range}"
     try:
         df = pd.read_csv(url, header=None)
         return str(df.iloc[0, 0]) if not df.empty else "데이터 없음"
     except: return "데이터 없음"
 
 def load_data():
-    # 시트 ID 통일 (대장님의 현재 시트)
-    sheet_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&t={time.time()}"
+    sheet_url = f"https://docs.google.com/spreadsheets/d/{DATA_SHEET_ID}/export?format=csv&t={time.time()}"
     df = pd.read_csv(sheet_url)
     df.columns = df.columns.str.strip()
     return df.fillna("")
+
 def get_market_data():
     tickers = {
         "코스피": "^KS11", 
@@ -36,36 +36,19 @@ def get_market_data():
         "환율": "USDKRW=X",
         "S&P500": "^GSPC"
     }
-
     data = {}
     for name, ticker in tickers.items():
         try:
-            # period를 5d로 하여 휴일이어도 최근 영업일 데이터를 가져오도록 설정
             df = yf.Ticker(ticker).history(period="5d")
-            
-            # 데이터가 비어있지 않은지 확인
             if not df.empty:
-                # 마지막 영업일 종가
                 curr = df['Close'].iloc[-1]
-                # 직전 영업일 종가
                 prev = df['Close'].iloc[-2] if len(df) > 1 else curr
-                
-                data[name] = {
-                    "curr": round(float(curr), 2), 
-                    "diff": round(float(curr - prev), 2)
-                }
+                data[name] = {"curr": round(curr, 2), "diff": round(curr - prev, 2)}
             else:
-                # 데이터를 못 가져오면 0으로 처리
-                data[name] = {"curr": 0.0, "diff": 0.0}
+                data[name] = {"curr": 0, "diff": 0}
         except:
-            data[name] = {"curr": 0.0, "diff": 0.0}
+            data[name] = {"curr": 0, "diff": 0}
     return data
-
-
-
-
-
-
 
 # UI 메인 로직
 if "password_correct" not in st.session_state: st.session_state["password_correct"] = False
@@ -83,7 +66,6 @@ if not st.session_state["password_correct"]:
             <marquee behavior="scroll" direction="left" scrollamount="7" style="color: #FFFFFF; font-size: 24px; font-weight: bold;">{get_cell_value('B6')}</marquee>
         </div>
     """, unsafe_allow_html=True)
-
     
     m = get_market_data()
     c1, c2, c3 = st.columns(3)
@@ -105,23 +87,9 @@ if not st.session_state["password_correct"]:
         else: st.error("암호가 틀렸습니다.")
     st.stop()
 
-
-
-
-# [상단부 생략... 기존 코드와 동일하게 유지]
-
-# 3. 데이터 로드 (대장님 환경에서 잘 되던 기존 방식 그대로 유지)
-def load_data():
-    sheet_url = f"https://docs.google.com/spreadsheets/d/10XzkMRByoPPjJ9ycm7i6IaaOpKEpBHaK8g6RQpE65sk/export?format=csv&t={time.time()}"
-    df = pd.read_csv(sheet_url)
-    df.columns = df.columns.str.strip()
-    return df.fillna("")
-
+# 로그인 후 데이터 로드
 df = load_data()
 
-# ==============================================================
-# [이슈 전광판 삽입]
-# ==============================================================
 st.markdown(f"""
     <div style="background: #e8f5e9; padding: 15px; border-radius: 10px; border-left: 5px solid #2e7d32; margin-bottom: 20px;">
         <div style="color: #2e7d32; font-weight: bold;">📢 오늘의 이슈</div>
@@ -129,31 +97,21 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# 5. 검색 및 일람표 (데이터 처리)
 def clear_search(): st.session_state["search_bar"] = ""
 col1, col2 = st.columns([1, 1])
 
-# 💡 'display_df'를 여기서 미리 비어있는 상태로 정의합니다!
 display_df = pd.DataFrame()
-
 if '테마' in df.columns:
     themes = df['테마'].unique()
     with col1: selected_theme = st.selectbox("📂 테마 선택", themes, on_change=clear_search)
     with col2: search_query = st.text_input("🔍 종목명 직접 검색", key="search_bar")
-
-    # 필터링 로직
-    if search_query:
-        display_df = df[df['종목명'].astype(str).str.contains(search_query, na=False)]
-    elif selected_theme:
-        display_df = df[df['테마'] == selected_theme]
-    else:
-        display_df = df.copy()
+    if search_query: display_df = df[df['종목명'].astype(str).str.contains(search_query, na=False)]
+    elif selected_theme: display_df = df[df['테마'] == selected_theme]
+    else: display_df = df.copy()
 else:
     st.error("시트에서 '테마' 컬럼을 찾을 수 없습니다.")
     display_df = df.copy()
 
-
-# 일람표 서식 적용
 if not display_df.empty:
     display_df['종목명'] = display_df.apply(lambda x: "🔥 " + str(x['종목명']) if '지정가' in str(x.values).replace(" ", "") and '근접' in str(x.values).replace(" ", "") else str(x['종목명']), axis=1)
 
@@ -168,22 +126,12 @@ def color_text(val):
 styled_df = display_df[valid_cols].style.map(color_text, subset=['변동율', '평단비율'])
 event = st.dataframe(styled_df, use_container_width=True, selection_mode="single-row", on_select="rerun")
 
-  # 6. 상세 분석 리포트 (수정된 버전)
-# filtered_df 대신 이미 정의된 display_df를 사용합니다.
 if 'event' in locals() and len(event.selection.rows) > 0:
     idx = event.selection.rows[0]
-    # display_df를 사용하도록 변경
     row = display_df.iloc[idx]
-    
     st.markdown(f"---")
     st.markdown(f"### 🔍 **{row['종목명']}** 상세 분석")
-    
-  
-
-  # ... (이하 나머지 코드는 동일하게 유지하세요)  
-    if '뉴스 와 펄' in row and row['뉴스 와 펄']:
-        st.info(f"📌 **참고 자료**: {row['뉴스 와 펄']}")
-    
+    if '뉴스 와 펄' in row and row['뉴스 와 펄']: st.info(f"📌 **참고 자료**: {row['뉴스 와 펄']}")
     stock_name = urllib.parse.quote(str(row['종목명']))
     st.markdown(f"""
         <div style="display: flex; gap: 150px; margin-bottom: 20px;">
@@ -192,13 +140,9 @@ if 'event' in locals() and len(event.selection.rows) > 0:
             <a href="https://gemini.google.com/app" target="_blank" style="padding:15px; border:2px solid #555; border-radius:8px; text-decoration:none; color:black;font-size: 13px;">🚀 제미나이 가기</a>
         </div>
     """, unsafe_allow_html=True)
-    
     st.subheader("📋 분석 대상 데이터 복사")
-    persona_prompt = (f"너는 나만의 주식 투자 전문 비서야. 나는 대장이야.\n\n"
-                      f"분석 대상: {row['종목명']}\n참고용 기존 자료: {row.get('뉴스 와 펄', '없음')}\n\n"
+    persona_prompt = (f"분석 대상: {row['종목명']}\n참고용 기존 자료: {row.get('뉴스 와 펄', '없음')}\n\n"
                       "지시사항:\n1. 웹 검색을 통해 해당 종목의 '최신 뉴스'와 '최신 공시'를 우선적으로 찾아줘.\n"
                       "2. 기존 자료는 참고만 하고, 최신 실시간 정보를 기반으로 기업의 핵심 이슈를 정리해줘.\n"
                       "3. 가격, 매매 전략, 평단가 등은 배제하고 오직 기업의 강점과 약점, 사업 가치와 최신 뉴스 흐름 위주로 보고해줘.")
     st.code(persona_prompt, language="text")
-    st.caption("💡 위 데이터를 [복사]한 뒤, [🚀 제미나이 가기]를 눌러 붙여넣으세요!")
-
