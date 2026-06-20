@@ -1,3 +1,4 @@
+# [01. 설정 및 라이브러리]
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -5,15 +6,14 @@ import time
 import urllib.parse
 import datetime
 import zoneinfo
-# 한국 시간으로 강제 설정
 now = datetime.datetime.now(zoneinfo.ZoneInfo("Asia/Seoul"))
 from streamlit_autorefresh import st_autorefresh
 
-# [주소만 수정됨] 격언, 공지, 이슈용 시트 ID
+# [02. 데이터 연결 ID]
 INFO_SHEET_ID = "10BZzLb5lKxujiVo1ktxPih-4n6_mWW_A4YaofmCVcTo"
-# [주소만 수정됨] 데이터 로드용 시트 ID
 DATA_SHEET_ID = "10XzkMRByoPPjJ9ycm7i6IaaOpKEpBHaK8g6RQpE65sk"
 
+# [03. 시트 데이터 함수]
 def get_cell_value(cell_range):
     url = f"https://docs.google.com/spreadsheets/d/{INFO_SHEET_ID}/gviz/tq?tqx=out:csv&range={cell_range}"
     try:
@@ -27,6 +27,7 @@ def load_data():
     df.columns = df.columns.str.strip()
     return df.fillna("")
 
+# [04. 시장 데이터 로드 함수]
 def get_market_data():
     tickers = {
         "코스피": "^KS11", 
@@ -41,32 +42,34 @@ def get_market_data():
         try:
             df = yf.Ticker(ticker).history(period="5d")
             if not df.empty:
-                curr = df['Close'].iloc[-1]
-                prev = df['Close'].iloc[-2] if len(df) > 1 else curr
+                curr = float(df['Close'].iloc[-1])
+                prev = float(df['Close'].iloc[-2]) if len(df) > 1 else curr
                 data[name] = {"curr": round(curr, 2), "diff": round(curr - prev, 2)}
             else:
-                data[name] = {"curr": 0, "diff": 0}
+                data[name] = {"curr": 0.0, "diff": 0.0}
         except:
-            data[name] = {"curr": 0, "diff": 0}
+            data[name] = {"curr": 0.0, "diff": 0.0}
     return data
-
-# UI 메인 로직
+# [05. 로그인 로직]
 if "password_correct" not in st.session_state: st.session_state["password_correct"] = False
 
-# [로그인 전 화면]
+# [06. 화면 UI]
 if not st.session_state["password_correct"]:
     st.set_page_config(layout="wide")
     col_a, col_b = st.columns([1, 1])
     col_a.subheader("📊 오늘의 종합 시황")
-    col_b.markdown(f"<div style='text-align: right;'>📅 {time.strftime('%Y-%m-%d')}</div>", unsafe_allow_html=True)
+    now_time = datetime.datetime.now(zoneinfo.ZoneInfo("Asia/Seoul")).strftime('%Y-%m-%d %H:%M')
+    col_b.markdown(f"<div style='text-align: right;'>📅 {now_time}</div>", unsafe_allow_html=True)
     
     st.markdown(f"""
         <div style="background: #1a1a1a; padding: 20px; border-radius: 15px; border: 3px solid #FFD700; box-shadow: 0 0 15px #FFD700; margin-bottom: 30px;">
             <div style="color: #FFD700; font-size: 14px; margin-bottom: 10px; font-weight: bold;">★ 오늘의 투자 격언 ★</div>
             <marquee behavior="scroll" direction="left" scrollamount="7" style="color: #FFFFFF; font-size: 24px; font-weight: bold;">{get_cell_value('B6')}</marquee>
         </div>
-    """, unsafe_allow_html=True)
+    """, unsafe_allow_html=True)    
     
+
+# [07. 시황 데이터 출력]
     m = get_market_data()
     c1, c2, c3 = st.columns(3)
     c1.metric("코스피", m["코스피"]["curr"], m["코스피"]["diff"])
@@ -87,9 +90,8 @@ if not st.session_state["password_correct"]:
         else: st.error("암호가 틀렸습니다.")
     st.stop()
 
-# 로그인 후 데이터 로드
+# [08. 종목 일람표 데이터 처리]
 df = load_data()
-
 st.markdown(f"""
     <div style="background: #e8f5e9; padding: 15px; border-radius: 10px; border-left: 5px solid #2e7d32; margin-bottom: 20px;">
         <div style="color: #2e7d32; font-weight: bold;">📢 오늘의 이슈</div>
@@ -100,6 +102,7 @@ st.markdown(f"""
 def clear_search(): st.session_state["search_bar"] = ""
 col1, col2 = st.columns([1, 1])
 
+# [09. 종목 필터링 및 표]
 display_df = pd.DataFrame()
 if '테마' in df.columns:
     themes = df['테마'].unique()
@@ -126,6 +129,7 @@ def color_text(val):
 styled_df = display_df[valid_cols].style.map(color_text, subset=['변동율', '평단비율'])
 event = st.dataframe(styled_df, use_container_width=True, selection_mode="single-row", on_select="rerun")
 
+# [10. 상세 분석 및 링크]
 if 'event' in locals() and len(event.selection.rows) > 0:
     idx = event.selection.rows[0]
     row = display_df.iloc[idx]
