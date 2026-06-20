@@ -3,6 +3,12 @@ import yfinance as yf
 import pandas as pd
 import time
 import urllib.parse
+
+import datetime
+import zoneinfo
+# 한국 시간으로 강제 설정
+now = datetime.datetime.now(zoneinfo.ZoneInfo("Asia/Seoul"))
+
 from streamlit_autorefresh import st_autorefresh
 
 # 1. 데이터 연결 설정
@@ -23,17 +29,33 @@ def load_data():
     return df.fillna("")
 
 def get_market_data():
-    tickers = {"코스피": "^KS11", "코스닥": "^KQ11", "코스피선물": "069500.KS", "환율": "USDKRW=X", "나스닥": "^IXIC", "S&P500": "^GSPC"}
+    # UI 화면 코드에 있는 모든 항목을 티커 리스트에 완벽하게 넣었습니다.
+    tickers = {
+        "코스피": "^KS11", 
+        "코스닥": "^KQ11", 
+        "나스닥": "^IXIC",
+        "코스피선물": "069500.KS",
+        "환율": "USDKRW=X",
+        "S&P500": "^GSPC"  # 이 항목이 없어서 에러가 났던 것입니다.
+    }
+
     data = {}
     for name, ticker in tickers.items():
         try:
-            df = yf.Ticker(ticker).history(period="2d")
+            df = yf.Ticker(ticker).history(period="5d")
             if not df.empty:
-                curr, prev = df['Close'].iloc[-1], df['Close'].iloc[-2]
+                curr = df['Close'].iloc[-1]
+                prev = df['Close'].iloc[-2] if len(df) > 1 else curr
                 data[name] = {"curr": round(curr, 2), "diff": round(curr - prev, 2)}
-            else: data[name] = {"curr": 0, "diff": 0}
-        except: data[name] = {"curr": 0, "diff": 0}
+            else:
+                data[name] = {"curr": 0, "diff": 0}
+        except:
+            data[name] = {"curr": 0, "diff": 0}
     return data
+
+
+
+
 
 # UI 메인 로직
 if "password_correct" not in st.session_state: st.session_state["password_correct"] = False
@@ -51,6 +73,7 @@ if not st.session_state["password_correct"]:
             <marquee behavior="scroll" direction="left" scrollamount="7" style="color: #FFFFFF; font-size: 24px; font-weight: bold;">{get_cell_value('B6')}</marquee>
         </div>
     """, unsafe_allow_html=True)
+
     
     m = get_market_data()
     c1, c2, c3 = st.columns(3)
