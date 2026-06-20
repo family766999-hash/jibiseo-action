@@ -1,4 +1,4 @@
-# [01. 설정 및 라이브러리]
+THRESHOLD = 5.0
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -6,10 +6,21 @@ import time
 import urllib.parse
 import datetime
 import zoneinfo
-st.cache_data.clear()
 now = datetime.datetime.now(zoneinfo.ZoneInfo("Asia/Seoul"))
 from streamlit_autorefresh import st_autorefresh
 
+# --- 그리고 이 아래에 제가 드렸던 CSS 코드를 넣으시면 됩니다 ---
+st.markdown("""
+    <style>
+        div.stButton > button {
+            font-size: 11px !important;
+            padding: 2px 8px !important;
+            white-space: nowrap !important;
+            min-height: 25px !important;
+            line-height: 1.2 !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
 # [02. 데이터 연결 ID]
 INFO_SHEET_ID = "10BZzLb5lKxujiVo1ktxPih-4n6_mWW_A4YaofmCVcTo"
 DATA_SHEET_ID = "10XzkMRByoPPjJ9ycm7i6IaaOpKEpBHaK8g6RQpE65sk"
@@ -103,15 +114,49 @@ st.markdown(f"""
 def clear_search(): st.session_state["search_bar"] = ""
 col1, col2 = st.columns([1, 1])
 
+# [08.5 급등 종목 버튼 (테마 삭제, 검색창 연동 전용)]
+st.markdown("""
+    <h6 style="margin: 0; padding: 0;">🔥 5%이상급등 종목 (클릭 시 자동 검색)</h4>
+""", unsafe_allow_html=True)
+st.write("") # 약간의 간격
+
+def clean_percent(val):
+    try: return float(str(val).replace('%', '').replace(',', '').strip())
+    except: return 0.0
+
+df['변동율_수치'] = df['변동율'].apply(clean_percent)
+hot_stocks = df[df['변동율_수치'] >= THRESHOLD]
+
+if not hot_stocks.empty:
+    # 6개씩 깔끔하게 정렬
+    cols = st.columns(6)
+    for i, (idx, row) in enumerate(hot_stocks.iterrows()):
+        # 종목명과 변동율만 심플하게 표시
+        button_label = f"{row['종목명']}\n({row['변동율']})"
+        
+        if cols[i % 6].button(button_label, key=f"hot_{idx}"):
+            # 검색창 key와 연동하여 자동으로 값 입력
+            st.session_state['search_bar'] = row['종목명']
+            st.rerun() 
+else:
+    st.info("현재 10% 이상 상승 종목이 없습니다.")
+
+
 # [09. 종목 필터링 및 표]
 display_df = pd.DataFrame()
 if '테마' in df.columns:
     themes = df['테마'].unique()
     with col1: selected_theme = st.selectbox("📂 테마 선택", themes, on_change=clear_search)
     with col2: search_query = st.text_input("🔍 종목명 직접 검색", key="search_bar")
-    if search_query: display_df = df[df['종목명'].astype(str).str.contains(search_query, na=False)]
-    elif selected_theme: display_df = df[df['테마'] == selected_theme]
-    else: display_df = df.copy()
+    
+    if search_query: 
+        # case=False: 대소문자 구분 안함
+        # na=False: 빈 값 무시
+        display_df = df[df['종목명'].astype(str).str.contains(search_query, case=False, na=False)]
+    elif selected_theme: 
+        display_df = df[df['테마'] == selected_theme]
+    else: 
+        display_df = df.copy()
 else:
     st.error("시트에서 '테마' 컬럼을 찾을 수 없습니다.")
     display_df = df.copy()
@@ -122,21 +167,62 @@ if not display_df.empty:
 st.subheader("📋 종목 일람표")
 cols = ['종목명', '현재가', '변동율', '매집평단', '평단비율', '현재단계', '예상고점']
 valid_cols = [c for c in cols if c in display_df.columns]
+
 def color_text(val):
     try:
         num = float(str(val).replace('%', '').replace(',', '').strip())
         return 'color: red;' if num > 0 else 'color: blue;' if num < 0 else 'color: black;'
     except: return 'color: black;'
+
 styled_df = display_df[valid_cols].style.map(color_text, subset=['변동율', '평단비율'])
-event = st.dataframe(styled_df, use_container_width=True, selection_mode="single-row", on_select="rerun")
+
+# [핵심 수정]: 버튼 클릭 시 넘어온 인덱스가 있다면 해당 줄을 선택된 상태로 유지
+selection_state = None
+if 'selected_row_index' in st.session_state:
+    # 데이터프레임 인덱스 확인
+    target_idx = st.session_state['selected_row_index']
+    # 화면에 보여지는 display_df 인덱스와 일치하는지 확인
+    if target_idx in display_df.index:
+        selection_state = [display_df.index.get_loc(target_idx)]
+
+event = st.dataframe(
+    styled_df, 
+    use_container_width=True, 
+    selection_mode="single-row", 
+    on_select="rerun"
+)
+
+# 이벤트로 선택된 행이 있다면 세션 업데이트, 없다면 기존 값 유지
+if len(event.selection.rows) > 0:
+    st.session_state['selected_row_index'] = display_df.index[event.selection.rows[0]]
+
+
 
 # [10. 상세 분석 및 링크]
+selected_row = None
+
+# 1. 표를 클릭한 경우
 if 'event' in locals() and len(event.selection.rows) > 0:
     idx = event.selection.rows[0]
-    row = display_df.iloc[idx]
-    st.markdown(f"---")
+    selected_row = display_df.iloc[idx]
+    st.session_state['selected_stock_name'] = selected_row['종목명']
+
+# 2. 버튼을 클릭한 경우
+elif 'selected_stock_name' in st.session_state:
+    target_name = st.session_state['selected_stock_name']
+    match = display_df[display_df['종목명'] == target_name]
+    if not match.empty:
+        selected_row = match.iloc[0]
+
+# 3. 상세 분석 출력부
+if selected_row is not None:
+    row = selected_row 
+    st.markdown("---")
     st.markdown(f"### 🔍 **{row['종목명']}** 상세 분석")
-    if '뉴스 와 펄' in row and row['뉴스 와 펄']: st.info(f"📌 **참고 자료**: {row['뉴스 와 펄']}")
+    
+    if '뉴스 와 펄' in row and row['뉴스 와 펄']: 
+        st.info(f"📌 **참고 자료**: {row['뉴스 와 펄']}")
+        
     stock_name = urllib.parse.quote(str(row['종목명']))
     st.markdown(f"""
         <div style="display: flex; gap: 150px; margin-bottom: 20px;">
@@ -145,6 +231,7 @@ if 'event' in locals() and len(event.selection.rows) > 0:
             <a href="https://gemini.google.com/app" target="_blank" style="padding:15px; border:2px solid #555; border-radius:8px; text-decoration:none; color:black;font-size: 13px;">🚀 제미나이 가기</a>
         </div>
     """, unsafe_allow_html=True)
+    
     st.subheader("📋 분석 대상 데이터 복사")
     persona_prompt = (f"분석 대상: {row['종목명']}\n참고용 기존 자료: {row.get('뉴스 와 펄', '없음')}\n\n"
                       "지시사항:\n1. 웹 검색을 통해 해당 종목의 '최신 뉴스'와 '최신 공시'를 우선적으로 찾아줘.\n"
