@@ -6,6 +6,7 @@ import time
 import urllib.parse
 import datetime
 import zoneinfo
+st.cache_data.clear()
 now = datetime.datetime.now(zoneinfo.ZoneInfo("Asia/Seoul"))
 from streamlit_autorefresh import st_autorefresh
 
