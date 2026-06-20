@@ -27,31 +27,41 @@ def load_data():
     df = pd.read_csv(sheet_url)
     df.columns = df.columns.str.strip()
     return df.fillna("")
-
 def get_market_data():
-    # UI 화면 코드에 있는 모든 항목을 티커 리스트에 완벽하게 넣었습니다.
     tickers = {
         "코스피": "^KS11", 
         "코스닥": "^KQ11", 
         "나스닥": "^IXIC",
         "코스피선물": "069500.KS",
         "환율": "USDKRW=X",
-        "S&P500": "^GSPC"  # 이 항목이 없어서 에러가 났던 것입니다.
+        "S&P500": "^GSPC"
     }
 
     data = {}
     for name, ticker in tickers.items():
         try:
+            # period를 5d로 하여 휴일이어도 최근 영업일 데이터를 가져오도록 설정
             df = yf.Ticker(ticker).history(period="5d")
+            
+            # 데이터가 비어있지 않은지 확인
             if not df.empty:
+                # 마지막 영업일 종가
                 curr = df['Close'].iloc[-1]
+                # 직전 영업일 종가
                 prev = df['Close'].iloc[-2] if len(df) > 1 else curr
-                data[name] = {"curr": round(curr, 2), "diff": round(curr - prev, 2)}
+                
+                data[name] = {
+                    "curr": round(float(curr), 2), 
+                    "diff": round(float(curr - prev), 2)
+                }
             else:
-                data[name] = {"curr": 0, "diff": 0}
+                # 데이터를 못 가져오면 0으로 처리
+                data[name] = {"curr": 0.0, "diff": 0.0}
         except:
-            data[name] = {"curr": 0, "diff": 0}
+            data[name] = {"curr": 0.0, "diff": 0.0}
     return data
+
+
 
 
 
