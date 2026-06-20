@@ -141,84 +141,89 @@ if not hot_stocks.empty:
 else:
     st.info("현재 10% 이상 상승 종목이 없습니다.")
 
-
 # [09. 종목 필터링 및 표]
-display_df = pd.DataFrame()
+
+# 테마 변경 시 상세 분석 잔상을 지우는 함수
+def clear_analysis():
+    st.session_state['selected_stock_name'] = None
+
+# 검색창 초기화 함수 (기존에 정의되어 있다면 그대로 두세요)
+if 'clear_search' not in globals():
+    def clear_search():
+        st.session_state['search_bar'] = ''
+        clear_analysis()
+
+col1, col2 = st.columns([1, 1])
+
 if '테마' in df.columns:
-    themes = df['테마'].unique()
-    with col1: selected_theme = st.selectbox("📂 테마 선택", themes, on_change=clear_search)
-    with col2: search_query = st.text_input("🔍 종목명 직접 검색", key="search_bar")
+    themes = ['전체'] + df['테마'].unique().tolist()
+    
+    # 테마 선택 시 clear_search와 clear_analysis를 모두 호출하여 초기화
+    with col1: 
+        selected_theme = st.selectbox(
+            "📂 테마 선택", 
+            themes, 
+            on_change=lambda: [clear_search(), clear_analysis()]
+        )
+    with col2: 
+        search_query = st.text_input("🔍 종목명 직접 검색", key="search_bar")
     
     if search_query: 
-        # case=False: 대소문자 구분 안함
-        # na=False: 빈 값 무시
-        display_df = df[df['종목명'].astype(str).str.contains(search_query, case=False, na=False)]
-    elif selected_theme: 
-        display_df = df[df['테마'] == selected_theme]
+        display_df = df[df['종목명'].astype(str).str.contains(search_query, case=False, na=False)].copy()
+    elif selected_theme != '전체': 
+        display_df = df[df['테마'] == selected_theme].copy()
     else: 
         display_df = df.copy()
 else:
-    st.error("시트에서 '테마' 컬럼을 찾을 수 없습니다.")
     display_df = df.copy()
 
+# 화면 표시용 이름(🔥 포함) 추가
 if not display_df.empty:
-    display_df['종목명'] = display_df.apply(lambda x: "🔥 " + str(x['종목명']) if '지정가' in str(x.values).replace(" ", "") and '근접' in str(x.values).replace(" ", "") else str(x['종목명']), axis=1)
+    display_df['표시용_종목명'] = display_df.apply(
+        lambda x: "🔥 " + str(x['종목명']) if '지정가' in str(x.values).replace(" ", "") and '근접' in str(x.values).replace(" ", "") else str(x['종목명']), 
+        axis=1
+    )
 
 st.subheader("📋 종목 일람표")
-cols = ['종목명', '현재가', '변동율', '매집평단', '평단비율', '현재단계', '예상고점']
-valid_cols = [c for c in cols if c in display_df.columns]
+cols_to_show = ['표시용_종목명', '현재가', '변동율', '매집평단', '평단비율', '현재단계', '예상고점']
+valid_cols = [c for c in cols_to_show if c in display_df.columns]
 
-def color_text(val):
-    try:
-        num = float(str(val).replace('%', '').replace(',', '').strip())
-        return 'color: red;' if num > 0 else 'color: blue;' if num < 0 else 'color: black;'
-    except: return 'color: black;'
-
-styled_df = display_df[valid_cols].style.map(color_text, subset=['변동율', '평단비율'])
-
-# [핵심 수정]: 버튼 클릭 시 넘어온 인덱스가 있다면 해당 줄을 선택된 상태로 유지
-selection_state = None
-if 'selected_row_index' in st.session_state:
-    # 데이터프레임 인덱스 확인
-    target_idx = st.session_state['selected_row_index']
-    # 화면에 보여지는 display_df 인덱스와 일치하는지 확인
-    if target_idx in display_df.index:
-        selection_state = [display_df.index.get_loc(target_idx)]
-
+# 표 출력
 event = st.dataframe(
-    styled_df, 
+    display_df[valid_cols], 
     use_container_width=True, 
     selection_mode="single-row", 
     on_select="rerun"
 )
 
-# 이벤트로 선택된 행이 있다면 세션 업데이트, 없다면 기존 값 유지
-if len(event.selection.rows) > 0:
-    st.session_state['selected_row_index'] = display_df.index[event.selection.rows[0]]
-
-
-
 # [10. 상세 분석 및 링크]
+# 1. 사용자가 표를 클릭했는지 확인 (가장 우선순위)
+if len(event.selection.rows) > 0:
+    idx = event.selection.rows[0]
+    # 클릭한 종목을 세션에 저장 (이게 검색어보다 우선함)
+    st.session_state['selected_stock_name'] = display_df.iloc[idx]['종목명']
+
+# 2. 분석 대상 설정
+target_name = st.session_state.get('selected_stock_name')
 selected_row = None
 
-# 1. 표를 클릭한 경우
-if 'event' in locals() and len(event.selection.rows) > 0:
-    idx = event.selection.rows[0]
-    selected_row = display_df.iloc[idx]
-    st.session_state['selected_stock_name'] = selected_row['종목명']
-
-# 2. 버튼을 클릭한 경우
-elif 'selected_stock_name' in st.session_state:
-    target_name = st.session_state['selected_stock_name']
-    match = display_df[display_df['종목명'] == target_name]
+# [핵심] 만약 클릭한 종목이 있다면 그것을 먼저 보여줌
+if target_name and any(display_df['종목명'] == target_name):
+    match = df[df['종목명'] == target_name]
+    if not match.empty:
+        selected_row = match.iloc[0]
+# [클릭한 게 없을 때만] 검색창 내용을 보여줌
+elif search_query:
+    match = display_df[display_df['종목명'].astype(str).str.contains(search_query, case=False, na=False)]
     if not match.empty:
         selected_row = match.iloc[0]
 
-# 3. 상세 분석 출력부
+# 3. 상세 분석 출력부 (이후는 동일)
 if selected_row is not None:
     row = selected_row 
     st.markdown("---")
     st.markdown(f"### 🔍 **{row['종목명']}** 상세 분석")
+    # ... (이하 동일)
     
     if '뉴스 와 펄' in row and row['뉴스 와 펄']: 
         st.info(f"📌 **참고 자료**: {row['뉴스 와 펄']}")
